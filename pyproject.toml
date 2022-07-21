@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thesis_functions"
+version = "0.1.0"
+authors = [
+  { name="Sverre Hassing", email="s.h.w.hassing@student.tudelft.nl" },
+]
+description = "Functions used in my Masters thesis on seismic interferometry"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+packages = ["thesis_functions", ]
+
+[project.urls]
+"Homepage" = "https://github.com/prisae/tlecture"
+"Bug Tracker" = "https://github.com/prisae/tlecture/issues"
