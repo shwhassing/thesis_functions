@@ -5,7 +5,7 @@ Created on Wed Apr  6 12:33:59 2022
 @author: sverr
 """
 
-import obspy
+# import obspy
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
@@ -348,8 +348,28 @@ def adapt_distances(path_info, line):
     return dx_mat
 
 def find_outer_stats(line, path_info):
+    """
+    Function that finds the index of the stations on the edges of a line. The
+    index corresponds to the array stations[line_id == line]. 
+
+    Parameters
+    ----------
+    line : int
+        Integer indicating which line is used for the function.
+    path_info : str
+        Path to coordinate information.
+
+    Returns
+    -------
+    stations_edges : np.ndarray
+        Array containing the index of two stations that lie on the outside of 
+        the line.
+
+    """
+    # Enforce line being an int
     line = int(line)
     
+    # Open coordinate information
     __, stations, coords = read_coords(path_info)
     dx_mat_full = calcCoord(path_info)
     
@@ -366,6 +386,7 @@ def find_outer_stats(line, path_info):
     # are working on a sphere and things are weird)    
     coords = WGS84_to_ENU(coords)
     
+    # Try each station on an edge to see which one is on the bottom
     for i in range(2):
         # The stations at the edges are the ones the furthest apart
         stations_edges = np.argwhere(dx_mat == dx_mat.max())[i]

@@ -235,14 +235,49 @@ def compare_spectrum(records, plot_max_f = None, rounding_brackets = np.array([0
     plt.show()
     
 def average_spectrum(record, plot_max_f = None, ax = None, savefig = False, label = '', show = True):
+    """
+    Determine the average spectrum of a provided record.
+
+    Parameters
+    ----------
+    record : obspy.core.Stream
+        Record to determine the average amplitude spectrum with.
+    plot_max_f : float, optional
+        Maximum frequency to plot. If not set will default to the maximum 
+        frequency according to the Nyquist criterion. The default is None.
+    ax : plt.axes._subplots.AxesSubplot, optional
+        Matplotlib ax to plot average amplitude spectrum on. 
+        The default is None.
+    savefig : bool, optional
+        Whether or not to plot the resulting figure. The saving location is
+        './Images/Filtering/'
+        The default is False.
+    label : str, optional
+        A label for the legend. The default is ''.
+    show : bool, optional
+        Whether or not to show the final figure. The default is True.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    # Calculate the spectrogram of the record with frequency and time axes
     spec, f, t = spectrogram(record)
+    
+    # Set the maximum frequency for plotting if it is not already defined
     if plot_max_f == None:
         plot_max_f = f[-1]
     
+    # Average over the time component
     spec = spec.sum(axis=1)/len(t)
     
+    # If no axis has been defined for the plotting, initiate a new figure
     if ax == None:
         fig, ax = plt.subplots(figsize=(10,7),dpi = 200)
+    
+    # Plot the average spectrum
     ax.plot(f, spec, label=label)
     ax.set_xlabel("Frequency [Hz]")
     ax.set_xlim([0,plot_max_f])
@@ -252,12 +287,15 @@ def average_spectrum(record, plot_max_f = None, ax = None, savefig = False, labe
     ax.grid()
     ax.legend()
     
-    time_start = record[0].stats.starttime
-    time_end = record[0].stats.endtime
-    station = record[0].stats.station[1:]
-    component = record[0].stats.channel[2]
-    
+    # If the figure is saved
     if savefig:
+        # Get information for the document name
+        time_start = record[0].stats.starttime
+        time_end = record[0].stats.endtime
+        station = record[0].stats.station[1:]
+        component = record[0].stats.channel[2]
+        
+        # Save the figure
         plt.savefig(f'./Images/Filtering/{time_start.year}-{time_start.month}-{time_start.day} {time_start.hour}-{time_start.minute}-{time_start.second} - {time_end.year}-{time_end.month}-{time_end.day} {time_end.hour}-{time_end.minute}-{time_end.second} {station}{component} Average spectrum')
     
     if show:
@@ -416,14 +454,38 @@ def compare_avg_spectrum(station,time_ranges,component,base_path,labels = None, 
     
     plt.show()
 
-def apply_filters(record):
+def apply_filters(record, centres = [-1,21,42,63], width=2.):
+    """
+    A simple function that applies the notch filters as described in the 
+    thesis. A minimum of 0.0001 Hz is enforced, because 0 and negative 
+    frequencies are not possible. 
+
+    Parameters
+    ----------
+    record : obspy.core.Stream
+        Stream that will be filtered.
+    centres : list, optional
+        List with centre frequencies for the notch filters. -1 is a trick to
+        get a notch filter between 0.0001 and 1 Hz. 
+    width : float, optional
+        Half the width of each notch filter, so for a notch at centre 21 Hz and
+        width = 2 Hz, the edge frequencies will be 19 Hz and 23 Hz
+
+    Returns
+    -------
+    record : obspy.core.Stream
+        Stream that is filtered.
+
+    """
     
+    # Initialise a list with the ranges to filter
     f_ranges = []
-    width = 2
-    centres = [0,21,42,63,84]
+
+    # Determine the edge frequencies
     for centre in centres:
         f_ranges.append([max(0.0001,centre-width), centre+width])
     
+    # Filter the record
     for f_range in f_ranges:
         record.filter('bandstop', freqmin = f_range[0], freqmax = f_range[1], corners = 4)
     
