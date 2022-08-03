@@ -1,20 +1,24 @@
-import numpy as np
+# import numpy as np
 import obspy
+from obspy.signal.cross_correlation import correlate_template
 
-def auto_filter(record):
-    f_ranges = []
-    width = 2
-    centres = [21,42,63]
-    for centre in centres:
-        f_ranges.append([centre-width, centre+width])
-        
-    for f_range in f_ranges:
-        record = record.filter('bandstop', 
-                               freqmin=f_range[0],
-                               freqmax=f_range[1],
-                               corners=4)
+def cross_corr(master_trace, trace2):
+    mast_trc = master_trace.copy()
+    # corr = np.correlate(trace2.data, mast_trc.data, mode='full')
+    corr = correlate_template(trace2, mast_trc, mode='full', normalize = None)
+    # corr = correlate_template(trace2, mast_trc, mode='full', normalize='full')
+    # corr = correlate(master_trace.data,trace2.data, mode='same')
+    trace_corr = obspy.Trace()
     
-    return record
+    trace_corr.data = corr
+    trace_corr.stats.starttime = master_trace.stats.starttime - (master_trace.stats.endtime - master_trace.stats.starttime)
+    trace_corr.stats.station = trace2.stats.station
+    trace_corr.stats.network = master_trace.stats.network
+    trace_corr.stats.delta = master_trace.stats.delta
+    trace_corr.stats.channel = master_trace.stats.channel
+    trace_corr.stats.location = trace2.stats.location
+    
+    return trace_corr
 
 def time_from_sec(seconds):
     """

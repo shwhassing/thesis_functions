@@ -15,10 +15,10 @@ import math
 
 import numpy as np
 from matplotlib import mlab
-from matplotlib.colors import Normalize
 
-from obspy.imaging.cm import obspy_sequential
-
+# Spectrogram function ripped from obspy. I want to take the resulting spectrogram
+# and be able to plot it myself. The obspy function only allows plotting with
+# their function.
 
 def _nearest_pow_2(x):
     """
@@ -104,73 +104,3 @@ def spectrogram(data, samp_rate, per_lap=0.9, wlen=None, log=False, dbscale=Fals
     freq = freq[1:]
     
     return specgram, freq, time
-    
-    # vmin, vmax = clip
-    # if vmin < 0 or vmax > 1 or vmin >= vmax:
-    #     msg = "Invalid parameters for clip option."
-    #     raise ValueError(msg)
-    # _range = float(specgram.max() - specgram.min())
-    # vmin = specgram.min() + vmin * _range
-    # vmax = specgram.min() + vmax * _range
-    # # norm = Normalize(vmin, vmax, clip=True)
-
-    # if not axes:
-    #     fig = plt.figure()
-    #     ax = fig.add_subplot(111)
-    # else:
-    #     ax = axes
-
-    # calculate half bin width
-    # halfbin_time = (time[1] - time[0]) / 2.0
-    # halfbin_freq = (freq[1] - freq[0]) / 2.0
-
-    # # argument None is not allowed for kwargs on matplotlib python 3.3
-    # kwargs = {k: v for k, v in (('cmap', cmap), ('zorder', zorder))
-    #           if v is not None}
-
-    # if log:
-    #     # pcolor expects one bin more at the right end
-    #     freq = np.concatenate((freq, [freq[-1] + 2 * halfbin_freq]))
-    #     time = np.concatenate((time, [time[-1] + 2 * halfbin_time]))
-    #     # center bin
-    #     time -= halfbin_time
-    #     freq -= halfbin_freq
-    #     # Log scaling for frequency values (y-axis)
-    #     ax.set_yscale('log')
-    #     # Plot times
-    #     ax.pcolormesh(time, freq, specgram, norm=norm, **kwargs)
-    # else:
-    #     # this method is much much faster!
-    #     specgram = np.flipud(specgram)
-    #     # center bin
-    #     extent = (time[0] - halfbin_time, time[-1] + halfbin_time,
-    #               freq[0] - halfbin_freq, freq[-1] + halfbin_freq)
-    #     ax.imshow(specgram, interpolation="nearest", extent=extent, **kwargs)
-
-    # # set correct way of axis, whitespace before and after with window
-    # # length
-    # ax.axis('tight')
-    # ax.set_xlim(0, end)
-    # ax.grid(False)
-
-    # if axes:
-    #     return ax
-
-    # ax.set_xlabel('Time [s]')
-    # ax.set_ylabel('Frequency [Hz]')
-    # if title:
-    #     ax.set_title(title)
-
-    # if not sphinx:
-    #     # ignoring all NumPy warnings during plot
-    #     with np.errstate(all='ignore'):
-    #         plt.draw()
-    # if outfile:
-    #     if fmt:
-    #         fig.savefig(outfile, format=fmt)
-    #     else:
-    #         fig.savefig(outfile)
-    # elif show:
-    #     plt.show()
-    # else:
-    #     return fig

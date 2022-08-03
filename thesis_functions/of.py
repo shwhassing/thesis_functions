@@ -2,39 +2,12 @@
 """
 Created on Wed Apr  6 12:31:54 2022
 
-@author: sverr
+@author: Sverre
 """
 import os
 import obspy
-import tarfile
-import numpy as np
+# import numpy as np
 
-def find_and_extract(path,filename):
-    # The function takes far too long, the files are simply too large to work with
-    day = filename[23:25]
-    path_file = os.path.join(path,day,filename)
-    
-    if not os.path.exists(path_file):
-        print("File not yet found")
-        # This method of getting the name of the month is a bit ugly, but does not require an extra package. 
-        # Otherwise import calendar and use 
-        # month_name = calendar.month_name[int(filename[20:22])]
-        month_name = (obspy.core.UTCDateTime(f"2020-{filename[20:22]}-01T00:00:00")).strftime('%B')
-        
-        # Create the path where the tar file is located with the format used for the data and then open it
-        path_tar = os.path.join(path,f"{month_name}-{day}th.tar.gz")
-        file = tarfile.open(path_tar)
-        
-        # Create the path of the file inside the tar
-        path_inTar = os.path.join(day,filename)
-        print("Extracting...")
-        # Extract the desired file
-        file.extract(path_inTar,path=path)
-        print("Extracting finished")
-        # Close the tar afterwards
-        file.close()
-    
-    return os.path.exists(path_file)
 
 def open_seis_file(path,filename):
     """
