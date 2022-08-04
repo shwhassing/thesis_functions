@@ -90,9 +90,9 @@ for counter,file in enumerate(file_list):
     # Copy information over to the new, stacked trace
     new_trace = obspy.Trace()
     new_trace.data = NMO_data.sum(axis=1)
-    new_trace.stats.sampling_rate = record[counter].stats.sampling_rate
-    new_trace.stats.starttime = record[counter].stats.starttime
-    new_trace.stats.channel = record[counter].stats.channel
+    new_trace.stats.sampling_rate = record[0].stats.sampling_rate
+    new_trace.stats.starttime = record[0].stats.starttime
+    new_trace.stats.channel = record[0].stats.channel
     new_trace.stats.distance = cmp_pos
     new_trace.stats.station = str(cmp_pos)
     
@@ -102,7 +102,7 @@ for counter,file in enumerate(file_list):
     print(f'\r{counter+1}/{len(file_list)}',end='')
 
 CMP_folder = path_cmp.split('\\')[-2]
-record_stack.write(f'Crosscorr {CMP_folder[-4:]} - line {line} - stack.mseed')
+record_stack.write(f'./Arrays/Crosscorr {CMP_folder[-4:]} - line {line} - stack.mseed')
 
 #%%
 

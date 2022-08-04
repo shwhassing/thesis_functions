@@ -18,19 +18,19 @@ import glob
 # distance information
 
 # Which line to use
-line = '0'
+line = '1'
 # The binning distance from the CMP location [m]
 tolerance = 5
 
 # Path to coordinate information
 path_info = os.path.normpath('H:\\Onderwijs\\TU Delft\\2-3 Master\'s thesis\\topografia.csv')
-# Output path where CMP gathers are stored
-path_out = os.path.normpath('E:\\Thesis\\Arrays\\CMP 5000\\')
 # Path to deconvolved virtual CSP gathers
 path_shot = os.path.normpath('E:\\Thesis\\Arrays\\Crosscorr 5000 - decon\\')
+# Output path where CMP gathers are stored
+path_out = os.path.normpath('E:\\Thesis\\Arrays\\CMP 5000\\')
 
 
-#%%
+#%% Open all CSG on line
 
 # Find all common shot gathers on this line
 file_list = glob.glob(os.path.join(path_shot,line,'*.mseed'))
@@ -101,8 +101,6 @@ for new_mp in new_mps:
 
 #%% Save offset information
 
-# XXX Can just be added to the resorting loop
-
 # Get the maximum amount of traces in a CMP gather
 max_fold = 0
 for stream in cmp_gathers:
@@ -135,8 +133,16 @@ np.save(f'./Arrays/offset_mat{line}',offset_mat)
 
 #%% Save results
 
+# Check if the output folder exists and make it otherwise
+if not os.path.isdir(path_out):
+    os.mkdir(path_out)
+
 # Add the line id to the path
 path_full = os.path.join(path_out,line)
+
+# Check if the output folder exists and make it otherwise
+if not os.path.isdir(path_full):
+    os.mkdir(path_full)
 
 # Go over each CMP gather
 for i,stream in enumerate(cmp_gathers):

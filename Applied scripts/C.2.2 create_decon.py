@@ -35,6 +35,10 @@ n = 300 # lag times of autocorrelation used
 
 #%%
 
+# Check if the output folder exists and make it otherwise
+if not os.path.isdir(os.path.join(path_out)):
+    os.mkdir(os.path.join(path_out))
+
 file_list = glob.glob(os.path.join(path_saved,line,f'Line {line} - shot *.mseed'))
 
 fragment = f'Line {line} - shot '
@@ -57,6 +61,10 @@ for i,file in enumerate(file_list):
     filename = os.path.split(file)[-1]
     
     print(f'\r{i} - Processed...',end='')
+    
+    # Check if the folder exists and otherwise create it
+    if not os.path.isdir(os.path.join(path_out,line)):
+        os.mkdir(os.path.join(path_out,line))
     
     record_w_filt.write(os.path.join(path_out,line,filename))
     
