@@ -5,3 +5,4 @@ import thesis_functions.TauP
 import thesis_functions.util
 import thesis_functions.spectrogram_alt
 import thesis_functions.proc
+import thesis_functions.plot

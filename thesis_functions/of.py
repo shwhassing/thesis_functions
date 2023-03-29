@@ -6,7 +6,8 @@ Created on Wed Apr  6 12:31:54 2022
 """
 import os
 import obspy
-# import numpy as np
+import numpy as np
+from thesis_functions.util import find_closest
 
 
 def open_seis_file(path,filename):
@@ -302,4 +303,45 @@ def open_diff_stat(stations, time_start, component, base_path, time_end = None, 
             print(f'\r{counter}/{len(stations)}', end = '')
     if print_progress:
         print("")
+    return record
+
+def load_cmp(path_cmp,line,cmp_pos):
+    """
+    Load a CMP gather that is closest to the specified CMP position. This 
+    function assumes that offset_mat.npy and CMP_locs.npy have been generated
+    and are found in location './Arrays/'.
+
+    Parameters
+    ----------
+    path_cmp : str
+        Path to the CMP gathers.
+    line : str
+        Line id for which line should be opened.
+    cmp_pos : float
+        Which CMP position should be opened. The closest available one will be
+        used.
+
+    Returns
+    -------
+    record : obspy.core.stream.Stream
+        CMP gather opened as a stream.
+
+    """
+    offset_mat = np.load(f'./Arrays/offset_mat{line}.npy')
+    CMP_locs = np.load(f'./Arrays/CMP_locs{line}.npy')
+    
+    # Find the closest CMP location
+    close_idx = find_closest(CMP_locs,cmp_pos)
+    
+    # Find the offset distances for this CMP
+    offset = offset_mat[close_idx,:].squeeze()
+    
+    # Load the file
+    file = os.path.join(path_cmp,line,f'CMP {int(cmp_pos)}.mseed')
+    record = obspy.read(file)
+   
+    # Add the offsets
+    for i,trace in enumerate(record):
+        trace.stats.distance = offset[i]
+    
     return record

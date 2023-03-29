@@ -9,6 +9,76 @@ import numpy as np
 import matplotlib.pyplot as plt
 from thesis_functions.spectrogram_alt import spectrogram as spectr_alt
 from thesis_functions.of import open_cont_record
+from thesis_functions.util import stream_to_array
+
+def bandpass_ramp(record, freqs):
+    """
+    Applies a bandpass filter to the provided stream. Bandpass is defined by
+    four frequencies, where a ramp function is applied between first two and last
+    two values. At frequencies between second and third values, all energy is
+    passed through.
+
+    Parameters
+    ----------
+    record : obspy.Stream
+        Stream to which the bandpass filter is applied.
+    freqs : list
+        List containing four frequencies that determine which frequencies are
+        allowed through.
+
+    Raises
+    ------
+    ValueError
+        When more or less than four frequencies are provided in 'freqs'.
+
+    Returns
+    -------
+    new_stream : obspy.Stream
+        Stream containing the filtered data.
+
+    """
+    
+    if len(freqs) != 4:
+        raise ValueError(f"Frequency list must contain 4 values but contains {len(freqs)}")
+    
+    # Get the data out of the stream
+    dt = record[0].stats.delta
+    data = stream_to_array(record)
+    
+    # Get frequency axis and Fourier transform
+    f = np.fft.rfftfreq(data.shape[1], dt)
+    spec = np.fft.rfft(data, axis=1)
+
+    # Get the multiplication function 
+    mult = np.zeros(spec.shape[1])
+    
+    for i in range(len(freqs)-1):
+        # Select part of the function
+        mask = np.where(np.logical_and(f >= freqs[i], f <= freqs[i+1]), True, False)        
+        
+        if i == 0:
+            # Between the first two frequencies get a ramp from 0 to 1
+            mult[mask] = np.linspace(0, 1, np.sum(mask))
+        elif i == 1:
+            # Between the second and third, set everything to 1
+            mult[mask] += 1
+        elif i == 2:
+            # Between last two, get a ramp from 1 to 0
+            mult[mask] = np.linspace(1, 0, np.sum(mask))
+        
+    # Multiply the spectrum with the ramp function
+    spec *= mult[np.newaxis,:]
+    
+    # Perform a reverse Fourier transform
+    new_data = np.fft.irfft(spec, data.shape[1], axis=1)
+    
+    # Put the new data into a stream with the same stats as the old one
+    new_stream = record.copy()
+    for i,trace in enumerate(new_stream):
+        trace.data = new_data[i,:]
+        
+    return new_stream
+    
 
 def plot_spectrum(record, plot_max_f = None):
     """
@@ -378,8 +448,9 @@ def spectrogram(record):
 
     Parameters
     ----------
-    record : obspy Stream object
-        DESCRIPTION.
+    record : obspy.core.stream.Stream or obspy.core.trace.Trace
+        Input trace for which the Fourier transform is taken. If a stream is
+        provided, the first trace is used. 
 
     Returns
     -------
@@ -454,7 +525,7 @@ def compare_avg_spectrum(station,time_ranges,component,base_path,labels = None, 
     
     plt.show()
 
-def apply_filters(record, centres = [-1,21,42,63], width=2.):
+def apply_filters(record, method='bandpass', centres = [-1,21,42,63], width=2.):
     """
     A simple function that applies the notch filters as described in the 
     thesis. A minimum of 0.0001 Hz is enforced, because 0 and negative 
@@ -478,15 +549,20 @@ def apply_filters(record, centres = [-1,21,42,63], width=2.):
 
     """
     
-    # Initialise a list with the ranges to filter
-    f_ranges = []
-
-    # Determine the edge frequencies
-    for centre in centres:
-        f_ranges.append([max(0.0001,centre-width), centre+width])
+    if method == 'bandpass':
+        record.filter('bandpass', freqmin=5, freqmax=40, corners=4)
+    elif method == 'notch':
+        # Initialise a list with the ranges to filter
+        f_ranges = []
     
-    # Filter the record
-    for f_range in f_ranges:
-        record.filter('bandstop', freqmin = f_range[0], freqmax = f_range[1], corners = 4)
+        # Determine the edge frequencies
+        for centre in centres:
+            f_ranges.append([max(0.0001,centre-width), centre+width])
+        
+        # Filter the record
+        for f_range in f_ranges:
+            record.filter('bandstop', freqmin = f_range[0], freqmax = f_range[1], corners = 4)
+    else:
+        raise ValueError(f"method can be 'bandpass' or 'notch', not {method}")
     
     return record

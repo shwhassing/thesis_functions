@@ -4,11 +4,11 @@ import numpy as np
 import obspy
 from os.path import join
 from scipy.signal import convolve2d
-from thesis_functions.util import cross_corr
-from thesis_functions.coord import attach_distances, select_line, open_line_id, get_unique_lines, attach_line
+from thesis_functions.util import cross_corr, stream_to_array
+from thesis_functions.coord import Coords, correct_slowness
 from thesis_functions.filt import apply_filters
 
-def extract_results(path, master_trace, component, added_string=''):
+def extract_results(path, master_trace, component, path_info, added_string=''):
     """
     Extract the results of the illumination analysis from the output .txt files.
     
@@ -78,6 +78,11 @@ def extract_results(path, master_trace, component, added_string=''):
     dom_slow0 = np.array(dom_slow0, dtype=float)
     dom_slow1 = np.array(dom_slow1, dtype=float)
     
+    # Correct for the angle between the lines
+    dom_slow = correct_slowness(dom_slow0, dom_slow1, path_info)
+    # And separate the output again
+    dom_slow0, dom_slow1 = dom_slow[:,0], dom_slow[:,1]
+    
     return start_time, end_time, dom_slow0, dom_slow1
 
 def convert_date(times, method):
@@ -111,7 +116,7 @@ def convert_date(times, method):
             new_times.append(obspy.UTCDateTime(time))
     return np.array(new_times)
 
-def select_panels(dom_slow0, dom_slow1, vel_cut):
+def select_panels(dom_slow0, dom_slow1, vel_cut, method = 'per_line'):
     """
     Gives a mask to select all panels where the dominant slowness for both
     lines is lower than the reciprocal of a selected velocity.
@@ -133,11 +138,17 @@ def select_panels(dom_slow0, dom_slow1, vel_cut):
         are met.
 
     """
-    # Test for both lines
-    test0 = abs(dom_slow0) <= 1/vel_cut
-    test1 = abs(dom_slow1) <= 1/vel_cut
-    # And give back the places where both are selected.
-    return np.logical_and(test0, test1)
+    
+    if method == 'per_line':
+        # Test for both lines
+        test0 = abs(dom_slow0) <= 1/vel_cut
+        test1 = abs(dom_slow1) <= 1/vel_cut
+        # And give back the places where both are selected.
+        return np.logical_and(test0, test1)
+    elif method == 'length':
+        veclen = np.linalg.norm([dom_slow0,dom_slow1],axis=0)
+        
+        return veclen <= 1/vel_cut
 
 def date_from_filename(filename):
     """
@@ -235,7 +246,7 @@ def get_panel(record, times, window_length = 10.):
     for time in times:
         yield record.slice(time, time+window_length)
 
-def auto_corr_section(record):
+def autocorr_panel(record):
     """
     Autocorrelate all of the traces in a section. Only positive times are taken
     from the correlation, so that t0 from the autocorrelation is at the original
@@ -290,8 +301,13 @@ def recreate_stream(section, record, line, dist_tr, path_info):
         .
 
     """
+    # Set up coordinate information
+    crd = Coords(path_info)
+    
     # Select the right line for the data
-    rec = select_line(record, line, path_info)
+    rec = crd.line_stream(record)
+    # rec = select_line(record, line, path_info)
+    
     # Create a new stream
     section_stream = obspy.Stream()
     
@@ -308,9 +324,47 @@ def recreate_stream(section, record, line, dist_tr, path_info):
         
         # Add the trace to the stream
         section_stream += trace
-
-    section_stream = attach_distances(section_stream, dist_tr, line, path_info)
+        
+    section_stream = crd.attach_distances(section_stream, line, mtr_idx = dist_tr)
+    # section_stream = attach_distances(section_stream, dist_tr, line, path_info)
     return section_stream
+
+def recreate_stream_NMO(new_data,record):
+    """
+    An adapted version of recreate stream for NMO corrected CMP gathers. 
+
+    Parameters
+    ----------
+    new_data : np.ndarray
+        Array containing the new data that should be fit in a stream.
+    record : obspy.core.stream.Stream
+        Stream which serves as the example. Most data is copied over
+
+    Returns
+    -------
+    record_shift : obspy.core.stream.Stream
+        A stream containing the data of new_data.
+
+    """
+    # XXX Can probably be merged with recreate_stream
+    record_shift = obspy.Stream()
+    
+    # Go over each trace
+    for i in range(new_data.shape[1]):
+        # Create a new trace
+        trace = obspy.Trace()
+        # Add the data and extra information
+        trace.data                  = new_data[:,i]
+        trace.stats.station         = record[i].stats.station
+        trace.stats.sampling_rate   = record[i].stats.sampling_rate
+        trace.stats.starttime       = record[i].stats.starttime
+        trace.stats.channel         = record[i].stats.channel
+        trace.stats.distance        = record[i].stats.distance
+        
+        # Add the trace to the stream
+        record_shift += trace
+        
+    return record_shift
 
 def normalise_section(record):
     """
@@ -332,14 +386,16 @@ def normalise_section(record):
     # Initialise a new record
     new_record = record.copy()
     
+    data = stream_to_array(new_record)
+    
     # Calculate the rms of the trace. A trace with no data is just divided by 1
-    squares = np.square(np.array(record))
+    squares = np.square(data)
     mean_squares = np.mean(squares, axis=1)
     mean_squares[mean_squares == 0] = 1.
     root_mean_squares = np.sqrt(mean_squares)
     
     # Divide each trace by its rms
-    new_data = np.array(record) / root_mean_squares[:,np.newaxis]
+    new_data = data / root_mean_squares[:,np.newaxis]
     
     # Add the new data to the stream
     for i,trace in enumerate(new_record):
@@ -383,7 +439,16 @@ def normalise_trace(trace):
     new_trace.stats = trace.stats
     return new_trace
 
-def autocorr_section(path_base, path_saved, path_info, mtr_station, component, window_length, vel_cut, added_string = '', print_progress=True):
+def autocorr_section(path_base, 
+                     path_saved, 
+                     path_info, 
+                     mtr_station, 
+                     component, 
+                     window_length, 
+                     vel_cut, 
+                     added_string = '', 
+                     print_progress=True, 
+                     sel_method = 'per_line'):
     """
     Function that handles generating an autocorrelated section from the results
     of illumination analysis. 
@@ -416,14 +481,19 @@ def autocorr_section(path_base, path_saved, path_info, mtr_station, component, w
 
     """
     # Get the results from the illumination analysis
-    start_time, __, dom_slow0, dom_slow1 = extract_results(path_saved, mtr_station, component, added_string)
+    start_time, __, dom_slow0, dom_slow1 = extract_results(path_saved, mtr_station, component, path_info, added_string)
+    
     # Select the times when the events come in roughly vertical
-    mask = select_panels(dom_slow0, dom_slow1, vel_cut)
+    mask = select_panels(dom_slow0, dom_slow1, vel_cut, method=sel_method)
+    
     times_sel = start_time[mask]
+    
+    # Set up coordinate info
+    crd = Coords(path_info)
     
     # Convert the times to obspy UTCDateTime objects and open the line numbers
     times_sel = convert_date(times_sel, 'obspy')
-    line_id = open_line_id(path_info)
+    line_id = crd.line_id
     
     # Now go over all files with raw data
     folder_list = glob.glob(os.path.join(path_base,'*'))
@@ -466,11 +536,13 @@ def autocorr_section(path_base, path_saved, path_info, mtr_station, component, w
                 panel = normalise_section(panel)
                 
                 # Autocorrelate it
-                auto_corr = auto_corr_section(panel)
+                auto_corr = autocorr_panel(panel)
                 
                 # And add the data of this panel to the total
-                section_l0 += np.array(select_line(auto_corr, '0', path_info))
-                section_l1 += np.array(select_line(auto_corr, '1', path_info))
+                section_l0 += stream_to_array(crd.line_stream(auto_corr, 0))
+                section_l1 += stream_to_array(crd.line_stream(auto_corr, 1))
+                # section_l0 += np.array(select_line(auto_corr, '0', path_info))
+                # section_l1 += np.array(select_line(auto_corr, '1', path_info))
     
     if print_progress:
         print(f'\r{i+1}/{len(folder_list)}\t[{j+1}/{len(file_list)}]\t\t\t\t', end = '')
@@ -493,7 +565,7 @@ def flip_shot(virt_rec,dom_slow):
 
     Parameters
     ----------
-    virt_rec : np.ndarray
+    virt_rec : obspy.stream.Stream
         The crosscorrelated panel with the distance to the virtual shot 
         location attached as trace.stats.distance. Distances upslope should be
         higher.
@@ -518,7 +590,7 @@ def flip_shot(virt_rec,dom_slow):
     for i,trace in enumerate(virt_rec):
         dists[i] = trace.stats.distance
     
-    raw_data = np.array(virt_rec)
+    raw_data = stream_to_array(virt_rec)
     # Now take the causal or time-reversed acausal part depending on the sign
     # of the slowness and the relative position of the receiver to the virtual
     # shot location
@@ -598,7 +670,7 @@ def save_shotdata(path_save,shots,line,min_vel):
             os.mkdir(new_path)
             stream.write(os.path.join(new_path,filename))
 
-def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,window_length,vel_cut,print_progress=True, return_stream=None):
+def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,window_length,vel_cut,print_progress=True, return_stream=None, method='per_line'):
     """
     A function that creates virtual shot gathers from selected noise panels.
     Because the function is too slow, it was parallelised, for that we refer
@@ -635,17 +707,21 @@ def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,windo
 
     """
     # Extract the results of the illumination analysis
-    start_time, __, dom_slow0, dom_slow1 = extract_results(path_saved, mtr_station, component)
+    start_time, __, dom_slow0, dom_slow1 = extract_results(path_saved, mtr_station, component, path_info)
     
     # Select only the panels with the right slowness
-    mask = select_panels(dom_slow0, dom_slow1, vel_cut)
+    mask = select_panels(dom_slow0, dom_slow1, vel_cut, method=method)
+    
+    # Set up coordinate info
+    crd = Coords(path_info)
     
     times_sel = convert_date(start_time[mask],'obspy')
     dom_slow = np.stack([dom_slow0, dom_slow1]).swapaxes(0,1)
     dom_slow_sel = dom_slow[mask,:]
     
     # Get the line identifiers of each station
-    line_id = open_line_id(path_info)
+    line_id = crd.line_id
+    # line_id = open_line_id(path_info)
     
     # Read one file to get some information
     record = obspy.read(glob.glob(os.path.join(path_base,'*','*.mseed'))[0])
@@ -683,7 +759,8 @@ def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,windo
             # Now read the file
             record = obspy.read(file)
             # And attach the line identifiers to the record
-            record = attach_line(record,path_info)
+            record = crd.attach_coords(record)
+            # record = attach_line(record,path_info)
             
             # Go over each panel in the file
             for i,panel in enumerate(get_panel(record,times_chunk,window_length)):
@@ -701,7 +778,8 @@ def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,windo
                     mtr_stat = master_trace.stats.station
                     
                     # Take only the traces that belong to the same line
-                    panel_sel = select_line(panel,line,path_info)
+                    panel_sel = crd.line_stream(panel,line)
+                    # panel_sel = select_line(panel,line,path_info)
                     
                     # Find the index of the master trace
                     for idx,trace in enumerate(panel_sel):
@@ -718,7 +796,8 @@ def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,windo
                     
                     # Attach the distance to the virtual shot location to each
                     # trace
-                    record_corr = attach_distances(record_corr, new_j, line, path_info)
+                    record_corr = crd.attach_distances(record_corr, line, mtr_idx = new_j)
+                    # record_corr = attach_distances(record_corr, new_j, line, path_info)
                     
                     # Now apply TRBI by taking the time-reversed acausal part 
                     # or the causal part on each side of the virtual shot 
@@ -743,7 +822,8 @@ def crosscorr_section(path_base,path_saved,path_info,mtr_station,component,windo
         results = []
     
     # Now go over each line and save each virtual shot gather as an .mseed file
-    lines = get_unique_lines(path_info)
+    lines = crd.lines
+    # lines = get_unique_lines(path_info)
     for line in lines:
         
         # First convert the virtual shot data to a stream
@@ -788,7 +868,7 @@ def AGC_scaling_val(window, type_scal):
 
     """
     # First takes the absolute values of the data
-    data = abs(np.array(window))
+    data = abs(stream_to_array(window))
     
     # Then determine the right kind of average
     if type_scal == 'mean':
@@ -928,7 +1008,7 @@ def AGC_old(record, oper_len, type_scal, basis):
     # Create a copy of the original data
     new_record = record.copy()
     # Get the data as an array
-    data = np.array(record)
+    data = stream_to_array(record)
     
     # Go over each sample and create the window
     for i,window in enumerate(get_AGC_window(record, oper_len, basis)):
@@ -981,8 +1061,8 @@ def AGC(record,oper_len,type_scal,basis):
         The new record after application of AGC.
 
     """
-    # Faster methods have not yet been implemented for the other means, so they
-    # use the old function
+    # XXX Faster methods have not yet been implemented for the other means, so 
+    # they use the old function 
     if type_scal in ['median','RMS']:
         return AGC_old(record,oper_len,type_scal,basis)
     
@@ -996,7 +1076,7 @@ def AGC(record,oper_len,type_scal,basis):
     operator = np.ones(oper_len_items)
     
     # Convert the data to an array
-    data = np.array(record)
+    data = stream_to_array(record)
     
     # Calculate how many data points are used for each point
     scal_vals = np.convolve(np.ones(data.shape[1]),operator,'full')
@@ -1082,39 +1162,13 @@ def TAR(record, power_constant):
     pow_mult = record[0].times()**power_constant
     
     # Multiply this with the data
-    data = np.array(record)
+    data = stream_to_array(record)
     data = data*pow_mult[np.newaxis,:]
     
     # Now attach the information to each trace
     for i,trace in enumerate(new_record):
         trace.data = data[i,:]
     return new_record
-
-def dom_plot(record, **kwargs):
-    """
-    Simple plotting function that uses obspy.core.stream.Stream.plot() and 
-    already sets some values to properly plot a seismic section. This means
-    that the keyword arguments type, time_down, fillcolors and grid_color 
-    cannot be used
-
-    Parameters
-    ----------
-    record : obspy.core.stream.Stream
-        The section to plot.
-    **kwargs : TYPE
-        The keyword arguments for the plotting routine.
-
-    Returns
-    -------
-    None.
-
-    """
-        
-    record.plot(type='section',
-                time_down = True,
-                fillcolors = ([0.5,0.5,0.5],None),
-                grid_color='white',
-                **kwargs)
     
 def ramp_func(len_ramp,idx_ramp,len_data):
     """
@@ -1547,7 +1601,7 @@ def NMO_corr(record,vel):
     idx_space = (np.linspace(0,len(record)-1,len(record))[np.newaxis,:] + np.zeros(len(times))[:,np.newaxis]).astype(int)
     
     # Convert the record into an array with the data
-    data = np.array(record)
+    data = stream_to_array(record)
     
     # Index the data at the specified positions to get the NMO corrected data
     shift_data = data[idx_space,idx_time]

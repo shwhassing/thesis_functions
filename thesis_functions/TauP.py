@@ -7,14 +7,9 @@ Created on Wed Apr  6 12:41:52 2022
 
 import numpy as np
 from scipy.signal import ricker#, correlate
-# from os.path import join, split
 import obspy
-# import csv
-# from thesis_functions.of import open_cont_record, open_diff_stat
-# from thesis_functions.coord import calcCoord, open_line_id
-from thesis_functions.util import cross_corr, tfs_string
-from thesis_functions.proc import normalise_trace
-# import matplotlib.pyplot as plt
+from thesis_functions.util import cross_corr, stream_to_array, fftcorrelate
+from thesis_functions.proc import normalise_section, normalise_trace
 
 ############## Core functions
 
@@ -300,6 +295,108 @@ def process_window(window,
     # Set up the results as a dictionary
     result = {'Start': window[0].stats.starttime,
               'End': window[0].stats.endtime,
+              'Slow0': slownesses[0],
+              'Slow1': slownesses[1]
+              }
+
+    return result
+
+def process_file(file,
+                 coord,
+                 distances,
+                 mtr_idx,
+                 window_length,
+                 p_range,
+                 verbose = 2):
+    """
+    Process a single noise panel for the illumination analysis when given the
+    path to the file containing that panel. 
+
+    Parameters
+    ----------
+    window : obspy.core.stream.Stream
+        The noise panel as a stream.
+    coord : th.coord.Coords
+        Object containing coordinate information
+    distances : np.ndarray
+        Array containing the distance to the master station.
+    mtr_idx : int
+        The index of the master trace in window.
+    window_length : float
+        The length of the noise panel in seconds.
+    p_range : np.ndarray
+        Array containing all slowness values that should be evaluated [s/m]
+
+    Returns
+    -------
+    None
+        If the panel is not complete in some sense, the function returns nothing
+    result : dict
+        Dictionary containing the results of the illumination analysis. Entries
+        are:
+            Start - UTCDateTime start of the noise panel
+            End - UTCDateTime end of the noise panel
+            Slow0 - The dominant slowness found on line 0 [s/m]
+            Slow1 - The dominant slowness found on line 1 [s/m]
+
+    """
+    panel = obspy.read(file)
+    
+    # If the panel is not complete or the master trace is not long enough, 
+    # skip the panel
+    if len(panel) != coord.amt_stats:
+        if verbose >= 2:
+            print(f"Panel is not complete. Starttime {panel[0].stats.starttime}")
+        return None
+    for trace in panel:
+        # If one of the traces does not have the right length, add nothing
+        # as a result
+        if trace.stats.npts != window_length * trace.stats.sampling_rate + 1:
+            if verbose >= 2:
+                print(f"Not all traces in panel [{panel[0].stats.starttime}] are complete")
+            return None
+    
+    # Apply a bandpass filter to the panel
+    panel = panel.filter('bandpass',
+                       freqmin=5,
+                       freqmax=40,
+                       corners=5)
+    
+    # # First normalise the panel
+    # norm_pan = obspy.Stream()
+    # for trace in window:
+    #     norm_wind += normalise_trace(trace)
+    norm_pan = normalise_section(panel)
+    
+    # Convert the data to arrays and perform the crosscorrelation
+    data = stream_to_array(norm_pan)
+    master_trace = data[mtr_idx,:]
+    
+    crosscorr = fftcorrelate(master_trace[np.newaxis,:], data)
+
+    # Get some extra information
+    dt = panel[0].stats.delta
+    # This ensures that the Tau-P transform is evaluated at t=0 in the 
+    # crosscorrelation
+    slice_idx = window_length * panel[0].stats.sampling_rate
+    
+    slownesses = []
+    
+    # Now go over both lines to determine the dominant slowness
+    for line in coord.lines:
+        # Select only the right line
+        data_line = crosscorr[coord.line_mask(line)]
+        # data_line = record_corr.select(location=line)
+
+        # Perform the Tau-P transform at the right location
+        TauP_data = TauP_slice(data_line, p_range, distances[coord.line_mask(line)].squeeze(), dt, slice_idx)
+
+        # Add the slowness to the results
+        slownesses.append(p_range[np.argmax(TauP_data)])
+    
+    # Set up the results as a dictionary
+    result = {'Start': panel[0].stats.starttime,
+              'End': panel[0].stats.endtime,
               'Slow0': slownesses[0],
               'Slow1': slownesses[1]
               }

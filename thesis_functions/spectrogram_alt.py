@@ -1,5 +1,6 @@
 """
-Plotting spectrogram of seismograms.
+Note that this file is ripped from ObsPy to use their spectogram routine without
+immediately plotting. 
 
 :copyright:
     The ObsPy Development Team (devs@obspy.org)
@@ -7,9 +8,8 @@ Plotting spectrogram of seismograms.
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-from future.builtins import *  # NOQA @UnusedWildImport
+# from __future__ import (absolute_import, division, print_function,
+                        # unicode_literals)
 
 import math
 
@@ -44,7 +44,7 @@ def _nearest_pow_2(x):
 
 def spectrogram(data, samp_rate, per_lap=0.9, wlen=None, log=False, dbscale=False, mult=8.0, sphinx=False):
     """
-    Computes and plots spectrogram of the input data.
+    Computes spectrogram of the input data.
 
     :param data: Input data
     :type samp_rate: float
