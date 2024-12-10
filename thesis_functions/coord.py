@@ -741,7 +741,7 @@ def calc_x_angle(path_info):
     # Fit a line through the points
     fit1 = fit_line(coords1[:,0],coords1[:,1])
 
-    angle_xaxis = np.arctan(fit1[0][0])
+    angle_xaxis = np.arctan(fit1[0])
 
     return angle_xaxis
 
