@@ -21,8 +21,7 @@ dependencies = ["numpy",
             	"matplotlib",
             	"scipy",
             	"obspy",
-            	"tqdm",
-            	"scikit-learn"]
+            	"tqdm"]
 
 [tool.setuptools.dynamic]
 version = {attr = "thesis_functions.__version__"}
