@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "thesis_functions"
-version = "0.1.0"
+dynamic = ["version"]
 authors = [
   { name="Sverre Hassing", email="s.h.w.hassing@student.tudelft.nl" },
 ]
@@ -17,10 +17,15 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
+dependencies = ["numpy",
+            	"matplotlib",
+            	"scipy",
+            	"obspy",
+            	"tqdm",
+            	"scikit-learn"]
+
+[tool.setuptools.dynamic]
+version = {attr = "thesis_functions.__version__"}
 
 [tool.setuptools]
-packages = ["thesis_functions", ]
-
-[project.urls]
-"Homepage" = "https://github.com/prisae/tlecture"
-"Bug Tracker" = "https://github.com/prisae/tlecture/issues"
+packages = ["thesis_functions"]
