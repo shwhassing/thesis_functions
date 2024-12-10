@@ -1,3 +1,4 @@
+__version__ = '1.0.0'
 import thesis_functions.coord
 import thesis_functions.filt
 import thesis_functions.of

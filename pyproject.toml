@@ -6,17 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "thesis_functions"
 dynamic = ["version"]
 authors = [
-  { name="Sverre Hassing", email="s.h.w.hassing@student.tudelft.nl" },
+  { name="Sverre Hassing", email="s.h.w.hassing@tudelft.nl" },
 ]
 description = "Functions used in my Masters thesis on seismic interferometry"
 readme = "README.md"
 license = { file="LICENSE" }
-requires-python = ">=3.9"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
-]
 dependencies = ["numpy",
             	"matplotlib",
             	"scipy",
@@ -25,6 +19,3 @@ dependencies = ["numpy",
 
 [tool.setuptools.dynamic]
 version = {attr = "thesis_functions.__version__"}
-
-[tool.setuptools]
-packages = ["thesis_functions"]
